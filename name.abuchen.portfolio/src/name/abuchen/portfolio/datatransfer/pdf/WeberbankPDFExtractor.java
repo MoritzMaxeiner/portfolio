@@ -24,6 +24,7 @@ public class WeberbankPDFExtractor extends AbstractPDFExtractor
         addBankIdentifier("BIC WELADED1WBB");
 
         addBuySellTransaction();
+        addAusgabeRuecknahmeTransaction();
         addDividendeTransaction();
     }
 
@@ -89,6 +90,85 @@ public class WeberbankPDFExtractor extends AbstractPDFExtractor
                         .section("date", "time") //
                         .match("^Schlusstag\\/\\-Zeit (?<date>[\\d]{2}\\.[\\d]{2}\\.[\\d]{4}) (?<time>[\\d]{2}:[\\d]{2}:[\\d]{2}).*$") //
                         .assign((t, v) -> t.setDate(asDate(v.get("date"), v.get("time"))))
+
+                        // @formatter:off
+                        // Ausmachender Betrag 9.978,18- EUR
+                        // Ausmachender Betrag 2.335,30 EUR
+                        // @formatter:on
+                        .section("amount", "currency") //
+                        .match("^Ausmachender Betrag (?<amount>[\\.,\\d]+)(\\-)? (?<currency>[\\w]{3})$") //
+                        .assign((t, v) -> {
+                            t.setAmount(asAmount(v.get("amount")));
+                            t.setCurrencyCode(asCurrencyCode(v.get("currency")));
+                        })
+
+                        // Limit bestens
+                        // Limit billigst
+                        .section("note").optional() //
+                        .match("^(?<note>Limit .*)$") //
+                        .assign((t, v) -> t.setNote(v.get("note")))
+
+                        .wrap(BuySellEntryItem::new);
+
+        addTaxesSectionsTransaction(pdfTransaction, type);
+    }
+
+    private void addAusgabeRuecknahmeTransaction()
+    {
+        DocumentType type = new DocumentType("Wertpapier Abrechnung (Ausgabe|R.cknahme) Investmentfonds");
+        this.addDocumentTyp(type);
+
+        Transaction<BuySellEntry> pdfTransaction = new Transaction<>();
+
+        Block firstRelevantLine = new Block("^Wertpapier Abrechnung (Ausgabe|R.cknahme) Investmentfonds.*$");
+        type.addBlock(firstRelevantLine);
+        firstRelevantLine.set(pdfTransaction);
+
+        pdfTransaction //
+
+                        .subject(() -> {
+                            BuySellEntry portfolioTransaction = new BuySellEntry();
+                            portfolioTransaction.setType(PortfolioTransaction.Type.BUY);
+                            return portfolioTransaction;
+                        })
+
+                        // Is type --> "R.cknahme" change from BUY to SELL
+                        .section("type").optional() //
+                        .match("^Wertpapier Abrechnung (?<type>(Ausgabe|R.cknahme)).*$") //
+                        .assign((t, v) -> {
+                            if (!"Ausgabe".equals(v.get("type")))
+                                t.setType(PortfolioTransaction.Type.SELL);
+                        })
+
+                        // @formatter:off
+                        // Stück 4.440 NEL ASA NO0010081235 (A0B733)
+                        // NAVNE-AKSJER NK -,20
+                        // Kurswert 9.657,00- EUR
+                        // @formatter:on
+                        .section("name", "isin", "wkn", "name1", "currency") //
+                        .match("^St.ck [\\.,\\d]+ (?<name>.*) (?<isin>[A-Z]{2}[A-Z0-9]{9}[0-9]) \\((?<wkn>[A-Z0-9]{6})\\)$") //
+                        .match("^(?<name1>.*)$") //
+                        .match("^Kurswert [\\.,\\d]+(\\-)? (?<currency>[\\w]{3})$") //
+                        .assign((t, v) -> {
+                            if (!v.get("name1").startsWith("Handels-/Ausführungsplatz"))
+                                v.put("name", v.get("name") + " " + v.get("name1"));
+
+                            t.setSecurity(getOrCreateSecurity(v));
+                        })
+
+                        // @formatter:off
+                        // Stück 4.440 NEL ASA NO0010081235 (A0B733)
+                        // @formatter:on
+                        .section("shares") //
+                        .match("^St.ck (?<shares>[\\.,\\d]+).*$") //
+                        .assign((t, v) -> t.setShares(asShares(v.get("shares"))))
+
+                        // @formatter:off
+                        // Schlusstag 26.03.2021 Auftraggeber XXXXXXXXXXXXX
+                        // @formatter:on
+                        .section("date") //
+                        .match("^Schlusstag (?<date>[\\d]{2}\\.[\\d]{2}\\.[\\d]{4}).*$") //
+                        .assign((t, v) -> t.setDate(asDate(v.get("date"))))
 
                         // @formatter:off
                         // Ausmachender Betrag 9.978,18- EUR
