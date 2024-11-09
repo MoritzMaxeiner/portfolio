@@ -194,12 +194,12 @@ public class WeberbankPDFExtractor extends AbstractPDFExtractor
 
     private void addDividendeTransaction()
     {
-        DocumentType type = new DocumentType("Dividendengutschrift");
+        DocumentType type = new DocumentType("Dividendengutschrift|Ausschüttung Investmentfonds");
         this.addDocumentTyp(type);
 
         Transaction<AccountTransaction> pdfTransaction = new Transaction<>();
 
-        Block firstRelevantLine = new Block("^Dividendengutschrift$");
+        Block firstRelevantLine = new Block("^(Dividendengutschrift|Ausschüttung Investmentfonds)$");
         type.addBlock(firstRelevantLine);
         firstRelevantLine.set(pdfTransaction);
 
@@ -219,7 +219,7 @@ public class WeberbankPDFExtractor extends AbstractPDFExtractor
                         .section("name", "isin", "wkn", "name1", "currency") //
                         .match("^St.ck [\\.,\\d]+ (?<name>.*) (?<isin>[A-Z]{2}[A-Z0-9]{9}[0-9]) \\((?<wkn>[A-Z0-9]{6})\\)$") //
                         .match("(?<name1>.*)") //
-                        .match("^Dividendengutschrift [\\.,\\d]+ (?<currency>[\\w]{3}).*$") //
+                        .match("^(Dividendengutschrift|Ausschüttung) [\\.,\\d]+ (?<currency>[\\w]{3}).*$") //
                         .assign((t, v) -> {
                             if (!v.get("name1").startsWith("Zahlbarkeitstag"))
                                 v.put("name", v.get("name") + " " + v.get("name1"));
@@ -257,7 +257,7 @@ public class WeberbankPDFExtractor extends AbstractPDFExtractor
                         // @formatter:on
                         .section("baseCurrency", "termCurrency", "exchangeRate", "fxGross", "gross") .optional() //
                         .match("^Devisenkurs (?<baseCurrency>[\\w]{3}) \\/ (?<termCurrency>[\\w]{3}) (?<exchangeRate>[\\.,\\d]+)$") //
-                        .match("^Dividendengutschrift (?<fxGross>[\\.,\\d]+) [\\w]{3} (?<gross>[\\.,\\d]+)\\+ [\\w]{3}$") //
+                        .match("^(Dividendengutschrift|Ausschüttung) (?<fxGross>[\\.,\\d]+) [\\w]{3} (?<gross>[\\.,\\d]+)\\+ [\\w]{3}$") //
                         .assign((t, v) -> {
                             ExtrExchangeRate rate = asExchangeRate(v);
                             type.getCurrentContext().putType(rate);
